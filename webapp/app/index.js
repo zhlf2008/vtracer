@@ -1,490 +1,509 @@
 import { BinaryImageConverter, ColorImageConverter } from 'vtracer';
 
-let runner;
+let runner = null;
 const canvas = document.getElementById('frame');
 const ctx = canvas.getContext('2d');
 const svg = document.getElementById('svg');
 const img = new Image();
 const progress = document.getElementById('progressbar');
 const progressregion = document.getElementById('progressregion');
-let mode = 'spline', clustering_mode = 'color', clustering_hierarchical = 'stacked';
+const canvasContainer = document.getElementById('canvas-container');
+const droptext = document.getElementById('droptext');
+const toastEl = document.getElementById('toast');
+const toastMsg = document.getElementById('toastMsg');
+const toastIcon = document.getElementById('toastIcon');
+const imageMeta = document.getElementById('imageMeta');
 
-// Hide canas and svg on load
-canvas.style.display = 'none';
-svg.style.display = 'none';
+// 当前状态参数
+let mode = 'spline'; // 'spline' | 'polygon' | 'none'
+let clustering_mode = 'color'; // 'color' | 'binary'
+let clustering_hierarchical = 'stacked'; // 'stacked' | 'cutout'
+let viewMode = 'svg'; // 'svg' | 'original' | 'blend'
 
-// Paste from clipboard
-document.addEventListener('paste', function (e) {
-    if (e.clipboardData) {
-        var items = e.clipboardData.items;
-        if (!items) return;
+// 数值参数
+let globalCorner = 60;
+let globalLength = 4.0;
+let globalSplice = 45;
+let globalFilterSpeckle = 4;
+let globalColorPrecision = 7;
+let globalLayerDifference = 16;
+let globalPathPrecision = 8;
 
-        //access data directly
-        for (var i = 0; i < items.length; i++) {
-            if (items[i].type.indexOf("image") !== -1) {
-                //image
-                var blob = items[i].getAsFile();
-                var URLObj = window.URL || window.webkitURL;
-                var source = URLObj.createObjectURL(blob);
-                setSourceAndRestart(source);
-            }
-        }
-        e.preventDefault();
-    }
-});
+// Toast 提示函数
+function showToast(message, icon = '✅') {
+    toastMsg.textContent = message;
+    toastIcon.textContent = icon;
+    toastEl.classList.add('show');
+    setTimeout(() => {
+        toastEl.classList.remove('show');
+    }, 2400);
+}
 
-// Download as SVG
-document.getElementById('export').addEventListener('click', function (e) {
-    const blob = new Blob([
-        `<?xml version="1.0" encoding="UTF-8"?>\n`,
-        `<!-- Generator: visioncortex VTracer -->\n`,
-        new XMLSerializer().serializeToString(svg)
-    ], {type: 'octet/stream'}),
-    url = window.URL.createObjectURL(blob);
-
-    this.href = url;
-    this.target = '_blank';
-
-    this.download = 'export-' + new Date().toISOString().slice(0, 19).replace(/:/g, '').replace('T', ' ') + '.svg';
-});
-
-// Store template config
-var presetConfigs = [
-    {
-        src: 'assets/samples/K1_drawing.jpg',
+// 预设配置表
+const presets = {
+    illustration: {
+        name: '彩色插画',
+        mode: 'spline',
+        clustering_mode: 'color',
+        clustering_hierarchical: 'stacked',
+        filter_speckle: 4,
+        color_precision: 7,
+        layer_difference: 16,
+        corner_threshold: 60,
+        length_threshold: 4.0,
+        splice_threshold: 45,
+        path_precision: 8,
+    },
+    bw: {
+        name: '黑白线稿',
+        mode: 'spline',
         clustering_mode: 'binary',
         clustering_hierarchical: 'stacked',
-        filter_speckle: 4,
+        filter_speckle: 2,
         color_precision: 6,
-        path_precision: 8,
         layer_difference: 16,
-        mode: 'spline',
         corner_threshold: 60,
-        length_threshold: 4,
+        length_threshold: 3.5,
         splice_threshold: 45,
-        source: 'https://commons.wikimedia.org/wiki/File:K1_drawing.jpg',
-        credit: '<a href="https://commons.wikimedia.org/">Wikimedia</a>',
+        path_precision: 8,
     },
-    {
-        src: 'assets/samples/Cityscape Sunset_DFM3-01.jpg',
+    pixel: {
+        name: '像素艺术',
+        mode: 'none',
         clustering_mode: 'color',
         clustering_hierarchical: 'stacked',
-        filter_speckle: 4,
+        filter_speckle: 1,
         color_precision: 8,
-        path_precision: 8,
-        layer_difference: 25,
-        mode: 'spline',
-        corner_threshold: 60,
-        length_threshold: 4,
+        layer_difference: 0,
+        corner_threshold: 180,
+        length_threshold: 4.0,
         splice_threshold: 45,
-        source: 'https://www.vecteezy.com/vector-art/227400-beautiful-cityscape-at-sunset',
-        credit: '<a href="https://www.vecteezy.com/free-vector/building">Building Vectors by Vecteezy</a>',
+        path_precision: 8,
     },
-    {
-        src: 'assets/samples/Gum Tree Vector.jpg',
+    poster: {
+        name: '扁平海报',
+        mode: 'spline',
         clustering_mode: 'color',
-        clustering_hierarchical: 'stacked',
-        filter_speckle: 4,
-        color_precision: 8,
-        path_precision: 8,
-        layer_difference: 28,
-        mode: 'spline',
-        corner_threshold: 60,
-        length_threshold: 4,
-        splice_threshold: 45,
-        source: 'https://www.vecteezy.com/vector-art/172177-gum-tree-vector',
-        credit: '<a href="https://www.vecteezy.com/free-vector/nature">Nature Vectors by Vecteezy</a>',
+        clustering_hierarchical: 'cutout',
+        filter_speckle: 8,
+        color_precision: 6,
+        layer_difference: 32,
+        corner_threshold: 45,
+        length_threshold: 5.0,
+        splice_threshold: 60,
+        path_precision: 6,
     },
-    {
-        src: 'assets/samples/vectorstock_31191940.png',
+    photo: {
+        name: '细腻照片',
+        mode: 'spline',
         clustering_mode: 'color',
         clustering_hierarchical: 'stacked',
         filter_speckle: 8,
-        color_precision: 7,
-        path_precision: 8,
-        layer_difference: 64,
-        mode: 'spline',
-        corner_threshold: 60,
-        length_threshold: 4,
-        splice_threshold: 45,
-        source: 'https://www.vectorstock.com/royalty-free-vector/dessert-poster-design-with-chocolate-cake-mousses-vector-31191940',
-        credit: '<a href="https://www.vectorstock.com/royalty-free-vector/dessert-poster-design-with-chocolate-cake-mousses-vector-31191940">Vector image by VectorStock / vectorstock</a>',
-    },
-    {
-        src: 'assets/samples/angel-luciano-LATYeZyw88c-unsplash-s.jpg',
-        clustering_mode: 'color',
-        clustering_hierarchical: 'stacked',
-        filter_speckle: 10,
         color_precision: 8,
-        path_precision: 8,
-        layer_difference: 48,
-        mode: 'spline',
-        corner_threshold: 180,
-        length_threshold: 4,
+        layer_difference: 12,
+        corner_threshold: 90,
+        length_threshold: 4.0,
         splice_threshold: 45,
-        source: 'https://unsplash.com/photos/LATYeZyw88c',
-        credit: '<span>Photo by <a href="https://unsplash.com/@roaming_angel?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">Angel Luciano</a> on <a href="https://unsplash.com/s/photos/dog?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">Unsplash</a></span>',
-    },
-    {
-        src: 'assets/samples/tank-unit-preview.png',
-        clustering_mode: 'color',
-        clustering_hierarchical: 'stacked',
-        filter_speckle: 0,
-        color_precision: 8,
         path_precision: 8,
-        layer_difference: 0,
-        mode: 'none',
-        corner_threshold: 180,
-        length_threshold: 4,
-        splice_threshold: 45,
-        source: 'https://opengameart.org/content/sideview-sci-fi-patreon-collection',
-        credit: '<span>Artwork by <a href="https://opengameart.org/content/sideview-sci-fi-patreon-collection">Luis Zuno</a> on <a href="https://opengameart.org/">opengameart.org</a></span>',
-    },
-];
-
-// Insert gallery items dynamically
-if (document.getElementById('galleryslider')) {
-    for (let i = 0; i < presetConfigs.length; i++) {
-        document.getElementById('galleryslider').innerHTML += 
-        `<li>
-        <div class="galleryitem uk-panel uk-flex uk-flex-center">
-            <a href="#">
-                <img src="${presetConfigs[i].src}" title="${presetConfigs[i].source}">
-            </a>
-        </div>
-        </li>`;
-        document.getElementById('credits-modal-content').innerHTML += 
-        `<p>${presetConfigs[i].credit}</p>`;
     }
-}
+};
 
-// Function to load a given config WITHOUT restarting
-function loadConfig(config) {
+// 应用预设
+function applyPreset(presetKey) {
+    const config = presets[presetKey];
+    if (!config) return;
+
     mode = config.mode;
     clustering_mode = config.clustering_mode;
     clustering_hierarchical = config.clustering_hierarchical;
+    globalCorner = config.corner_threshold;
+    globalLength = config.length_threshold;
+    globalSplice = config.splice_threshold;
+    globalFilterSpeckle = config.filter_speckle;
+    globalColorPrecision = config.color_precision;
+    globalLayerDifference = config.layer_difference;
+    globalPathPrecision = config.path_precision;
 
-    globalcorner = config.corner_threshold;
-    document.getElementById('cornervalue').innerHTML = globalcorner;
-    document.getElementById('corner').value = globalcorner;
-    
-    globallength = config.length_threshold;
-    document.getElementById('lengthvalue').innerHTML = globallength;
-    document.getElementById('length').value = globallength;
-    
-    globalsplice = config.splice_threshold;
-    document.getElementById('splicevalue').innerHTML = globalsplice;
-    document.getElementById('splice').value = globalsplice;
-
-    globalfilterspeckle = config.filter_speckle;
-    document.getElementById('filterspecklevalue').innerHTML = globalfilterspeckle;
-    document.getElementById('filterspeckle').value = globalfilterspeckle;
-
-    globalcolorprecision = config.color_precision;
-    document.getElementById('colorprecisionvalue').innerHTML = globalcolorprecision;
-    document.getElementById('colorprecision').value = globalcolorprecision;
-
-    globallayerdifference = config.layer_difference;
-    document.getElementById('layerdifferencevalue').innerHTML = globallayerdifference;
-    document.getElementById('layerdifference').value = globallayerdifference;
-
-    globalpathprecision = config.path_precision;
-    document.getElementById('pathprecisionvalue').innerHTML = globalpathprecision;
-    document.getElementById('pathprecision').value = globalpathprecision;
+    updateUIFromState();
+    restart();
+    showToast(`已切换至「${config.name}」预设`);
 }
 
-// Choose template from gallery
-let chooseGalleryButtons = document.querySelectorAll('.galleryitem a');
-chooseGalleryButtons.forEach(item => {
-    item.addEventListener('click', function (e) {
-        // Load preset template config
-        let i = Array.prototype.indexOf.call(chooseGalleryButtons, item);
-        if (presetConfigs.length > i) {
-            loadConfig(presetConfigs[i]);
-        }
+// 同步 UI 控件与当前变量
+function updateUIFromState() {
+    // 聚类模式
+    document.getElementById('clustering-color').classList.toggle('selected', clustering_mode === 'color');
+    document.getElementById('clustering-binary').classList.toggle('selected', clustering_mode === 'binary');
 
-        // Set source as specified
-        setSourceAndRestart(this.firstElementChild.src);
+    // 图层模式
+    document.getElementById('clustering-stacked').classList.toggle('selected', clustering_hierarchical === 'stacked');
+    document.getElementById('clustering-cutout').classList.toggle('selected', clustering_hierarchical === 'cutout');
+
+    // 曲线模式
+    document.getElementById('spline').classList.toggle('selected', mode === 'spline');
+    document.getElementById('polygon').classList.toggle('selected', mode === 'polygon');
+    document.getElementById('none').classList.toggle('selected', mode === 'none');
+
+    // 控制显示/隐藏
+    Array.from(document.getElementsByClassName('clustering-color-options')).forEach(el => {
+        el.style.display = clustering_mode === 'color' ? '' : 'none';
+    });
+    Array.from(document.getElementsByClassName('spline-options')).forEach(el => {
+        el.style.display = mode === 'spline' ? '' : 'none';
+    });
+
+    // 滑块及显示值
+    document.getElementById('filterspeckle').value = globalFilterSpeckle;
+    document.getElementById('filterspecklevalue').textContent = globalFilterSpeckle;
+
+    document.getElementById('colorprecision').value = globalColorPrecision;
+    document.getElementById('colorprecisionvalue').textContent = globalColorPrecision;
+
+    document.getElementById('layerdifference').value = globalLayerDifference;
+    document.getElementById('layerdifferencevalue').textContent = globalLayerDifference;
+
+    document.getElementById('corner').value = globalCorner;
+    document.getElementById('cornervalue').textContent = globalCorner + '°';
+
+    document.getElementById('length').value = globalLength;
+    document.getElementById('lengthvalue').textContent = Number(globalLength).toFixed(1);
+
+    document.getElementById('splice').value = globalSplice;
+    document.getElementById('splicevalue').textContent = globalSplice + '°';
+
+    document.getElementById('pathprecision').value = globalPathPrecision;
+    document.getElementById('pathprecisionvalue').textContent = globalPathPrecision;
+}
+
+// 绑定预设按钮
+document.querySelectorAll('.preset-btn').forEach(btn => {
+    btn.addEventListener('click', function () {
+        document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        applyPreset(this.dataset.preset);
     });
 });
 
-// Upload button
-var imageSelect = document.getElementById('imageSelect'),
-imageInput = document.getElementById('imageInput');  
-imageSelect.addEventListener('click', function (e) {
-    imageInput.click();
-    e.preventDefault();
-});
-
-imageInput.addEventListener('change', function (e) {
-    setSourceAndRestart(this.files[0]);
-});
-
-// Drag-n-Drop
-var drop = document.getElementById('drop');
-var droptext = document.getElementById('droptext');
-drop.addEventListener('dragenter', function (e) {
-    if (e.preventDefault) e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
-    droptext.classList.add('hovering');
-    return false;
-});
-
-drop.addEventListener('dragleave', function (e) {
-    if (e.preventDefault) e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
-    droptext.classList.remove('hovering');
-    return false;
-});
-
-drop.addEventListener('dragover', function (e) {
-    if (e.preventDefault) e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
-    droptext.classList.add('hovering');
-    return false;
-});
-
-drop.addEventListener('drop', function (e) {
-    if (e.preventDefault) e.preventDefault();
-    droptext.classList.remove('hovering');
-    setSourceAndRestart(e.dataTransfer.files[0]);
-    return false;
-});
-
-// Get Input from UI controls
-var globalcorner = parseInt(document.getElementById('corner').value),
-    globallength = parseFloat(document.getElementById('length').value),
-    globalsplice = parseInt(document.getElementById('splice').value),
-    globalfilterspeckle = parseInt(document.getElementById('filterspeckle').value),
-    globalcolorprecision = parseInt(document.getElementById('colorprecision').value),
-    globallayerdifference = parseInt(document.getElementById('layerdifference').value),
-    globalpathprecision = parseInt(document.getElementById('pathprecision').value);
-
-// Load past inputs from localStorage
-/*
-if (localStorage.VSsettings) {
-    var settings = JSON.parse(localStorage.VSsettings);
-    document.getElementById('cornervalue').innerHTML = document.getElementById('corner').value = globalcorner = settings.globalcorner;
-    document.getElementById('lengthvalue').innerHTML = document.getElementById('length').value = globallength = settings.globallength;
-    document.getElementById('splicevalue').innerHTML = document.getElementById('splice').value = globalsplice = settings.globalsplice;
-}
-*/
-
-document.getElementById('none').addEventListener('click', function (e) {
-    mode = 'none';
-    restart();
-}, false);
-
-document.getElementById('polygon').addEventListener('click', function (e) {
-    mode = 'polygon';
-    restart();
-}, false);
-
-document.getElementById('spline').addEventListener('click', function (e) {
-    mode = 'spline';
-    restart();
-}, false);
-
-document.getElementById('clustering-binary').addEventListener('click', function (e) {
-    clustering_mode = 'binary';
-    restart();
-}, false);
-
-document.getElementById('clustering-color').addEventListener('click', function (e) {
+// 绑定聚类按钮
+document.getElementById('clustering-color').addEventListener('click', () => {
     clustering_mode = 'color';
+    updateUIFromState();
     restart();
-}, false);
+});
 
-document.getElementById('clustering-cutout').addEventListener('click', function (e) {
-    clustering_hierarchical = 'cutout';
+document.getElementById('clustering-binary').addEventListener('click', () => {
+    clustering_mode = 'binary';
+    updateUIFromState();
     restart();
-}, false);
+});
 
-document.getElementById('clustering-stacked').addEventListener('click', function (e) {
+document.getElementById('clustering-stacked').addEventListener('click', () => {
     clustering_hierarchical = 'stacked';
-    restart();
-}, false);
-
-document.getElementById('filterspeckle').addEventListener('change', function (e) {
-    globalfilterspeckle = parseInt(this.value);
-    document.getElementById('filterspecklevalue').innerHTML = this.value;
+    updateUIFromState();
     restart();
 });
 
-document.getElementById('colorprecision').addEventListener('change', function (e) {
-    globalcolorprecision = parseInt(this.value);
-    document.getElementById('colorprecisionvalue').innerHTML = this.value;
+document.getElementById('clustering-cutout').addEventListener('click', () => {
+    clustering_hierarchical = 'cutout';
+    updateUIFromState();
     restart();
 });
 
-document.getElementById('layerdifference').addEventListener('change', function (e) {
-    globallayerdifference = parseInt(this.value);
-    document.getElementById('layerdifferencevalue').innerHTML = this.value;
+// 绑定曲线模式按钮
+document.getElementById('spline').addEventListener('click', () => {
+    mode = 'spline';
+    updateUIFromState();
     restart();
 });
 
-document.getElementById('corner').addEventListener('change', function (e) {
-    globalcorner = parseInt(this.value);
-    document.getElementById('cornervalue').innerHTML = this.value;
+document.getElementById('polygon').addEventListener('click', () => {
+    mode = 'polygon';
+    updateUIFromState();
     restart();
 });
 
-document.getElementById('length').addEventListener('change', function (e) {
-    globallength = parseFloat(this.value);
-    document.getElementById('lengthvalue').innerHTML = this.value;
+document.getElementById('none').addEventListener('click', () => {
+    mode = 'none';
+    updateUIFromState();
     restart();
 });
 
-document.getElementById('splice').addEventListener('change', function (e) {
-    globalsplice = parseInt(this.value);
-    document.getElementById('splicevalue').innerHTML = this.value;
-    restart();
-});
+// 绑定滑块实时显示与改变触发
+function bindSlider(id, valId, suffix = '', isFloat = false, onChangeCallback) {
+    const slider = document.getElementById(id);
+    const valDisplay = document.getElementById(valId);
 
-document.getElementById('pathprecision').addEventListener('change', function (e) {
-    globalpathprecision = parseInt(this.value);
-    document.getElementById('pathprecisionvalue').innerHTML = this.value;
-    restart();
-});
-
-// Save inputs before unloading
-/*
-window.addEventListener('beforeunload', function () {
-    localStorage.VSsettings = JSON.stringify({
-        globalcorner: globalcorner,
-        globallength: globallength,
-        globalsplice: globalsplice,
+    slider.addEventListener('input', function () {
+        const val = isFloat ? parseFloat(this.value).toFixed(1) : this.value;
+        valDisplay.textContent = val + suffix;
     });
-});
-*/
 
-function setSourceAndRestart(source) {
-    img.src = source instanceof File ? URL.createObjectURL(source) : source;
-    img.onload = function () {
-        const width = img.naturalWidth, height = img.naturalHeight;
-        svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        if (height > width) {
-            document.getElementById('canvas-container').style.width = '50%';
-            document.getElementById('canvas-container').style.marginBottom = (height / width * 50) + '%';
-        } else {
-            document.getElementById('canvas-container').style.width = '';
-            document.getElementById('canvas-container').style.marginBottom = (height / width * 100) + '%';
-        }
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        ctx.getImageData(0, 0, canvas.width, canvas.height);
+    slider.addEventListener('change', function () {
+        onChangeCallback(isFloat ? parseFloat(this.value) : parseInt(this.value, 10));
         restart();
-    }
-    // Show display
-    canvas.style.display = 'block';
-    svg.style.display = 'block';
-    // Hide upload text
-    droptext.style.display = 'none';
+    });
 }
 
+bindSlider('filterspeckle', 'filterspecklevalue', '', false, v => globalFilterSpeckle = v);
+bindSlider('colorprecision', 'colorprecisionvalue', '', false, v => globalColorPrecision = v);
+bindSlider('layerdifference', 'layerdifferencevalue', '', false, v => globalLayerDifference = v);
+bindSlider('corner', 'cornervalue', '°', false, v => globalCorner = v);
+bindSlider('length', 'lengthvalue', '', true, v => globalLength = v);
+bindSlider('splice', 'splicevalue', '°', false, v => globalSplice = v);
+bindSlider('pathprecision', 'pathprecisionvalue', '', false, v => globalPathPrecision = v);
+
+// 视图模式切换
+function applyViewMode(newMode) {
+    viewMode = newMode;
+    document.getElementById('viewSvg').classList.toggle('active', viewMode === 'svg');
+    document.getElementById('viewOriginal').classList.toggle('active', viewMode === 'original');
+    document.getElementById('viewBlend').classList.toggle('active', viewMode === 'blend');
+
+    if (viewMode === 'svg') {
+        svg.style.display = 'block';
+        svg.style.opacity = '1';
+        canvas.style.display = 'none';
+    } else if (viewMode === 'original') {
+        svg.style.display = 'none';
+        canvas.style.display = 'block';
+        canvas.style.opacity = '1';
+    } else if (viewMode === 'blend') {
+        svg.style.display = 'block';
+        svg.style.opacity = '0.6';
+        canvas.style.display = 'block';
+        canvas.style.opacity = '0.5';
+    }
+}
+
+document.getElementById('viewSvg').addEventListener('click', () => applyViewMode('svg'));
+document.getElementById('viewOriginal').addEventListener('click', () => applyViewMode('original'));
+document.getElementById('viewBlend').addEventListener('click', () => applyViewMode('blend'));
+
+// 上传与拖拽
+const imageInput = document.getElementById('imageInput');
+const imageSelect = document.getElementById('imageSelect');
+const reUploadBtn = document.getElementById('reUploadBtn');
+const drop = document.getElementById('drop');
+
+imageSelect.addEventListener('click', (e) => {
+    e.preventDefault();
+    imageInput.click();
+});
+
+reUploadBtn.addEventListener('click', () => {
+    imageInput.click();
+});
+
+imageInput.addEventListener('change', function () {
+    if (this.files && this.files[0]) {
+        loadImage(this.files[0]);
+    }
+});
+
+// 剪贴板粘贴 (Ctrl+V)
+document.addEventListener('paste', function (e) {
+    if (e.clipboardData && e.clipboardData.items) {
+        const items = e.clipboardData.items;
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].type.indexOf('image') !== -1) {
+                const blob = items[i].getAsFile();
+                loadImage(blob);
+                showToast('已读取剪贴板图片', '📋');
+                e.preventDefault();
+                return;
+            }
+        }
+    }
+});
+
+// 拖拽处理
+drop.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    droptext.classList.add('hovering');
+});
+
+drop.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    droptext.classList.add('hovering');
+});
+
+drop.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    droptext.classList.remove('hovering');
+});
+
+drop.addEventListener('drop', (e) => {
+    e.preventDefault();
+    droptext.classList.remove('hovering');
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+        loadImage(e.dataTransfer.files[0]);
+    }
+});
+
+// 加载图片
+function loadImage(source) {
+    const srcUrl = source instanceof File || source instanceof Blob ? URL.createObjectURL(source) : source;
+    img.src = srcUrl;
+    img.onload = function () {
+        const width = img.naturalWidth;
+        const height = img.naturalHeight;
+
+        canvas.width = width;
+        canvas.height = height;
+        svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+        svg.setAttribute('width', width);
+        svg.setAttribute('height', height);
+
+        ctx.clearRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+
+        droptext.style.display = 'none';
+        canvasContainer.style.display = 'flex';
+
+        if (imageMeta) {
+            imageMeta.textContent = `分辨率: ${width} × ${height} px | 格式: SVG`;
+        }
+
+        restart();
+    };
+}
+
+// 重新启动转换管线
 function restart() {
-    document.getElementById('clustering-binary').classList.remove('selected');
-    document.getElementById('clustering-color').classList.remove('selected');
-    document.getElementById('clustering-' + clustering_mode).classList.add('selected');
-    Array.from(document.getElementsByClassName('clustering-color-options')).forEach((el) => {
-        el.style.display = clustering_mode == 'color' ? '' : 'none';
-    });
-
-    document.getElementById('clustering-cutout').classList.remove('selected');
-    document.getElementById('clustering-stacked').classList.remove('selected');
-    document.getElementById('clustering-' + clustering_hierarchical).classList.add('selected');
-
-    document.getElementById('none').classList.remove('selected');
-    document.getElementById('polygon').classList.remove('selected');
-    document.getElementById('spline').classList.remove('selected');
-    document.getElementById(mode).classList.add('selected');
-    Array.from(document.getElementsByClassName('spline-options')).forEach((el) => {
-        el.style.display = mode == 'spline' ? '' : 'none';
-    });
-
-    if (!img.src) {
+    if (!img.src || !img.naturalWidth) {
         return;
     }
+
+    // 清理旧 SVG
     while (svg.firstChild) {
         svg.removeChild(svg.firstChild);
     }
+
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(img, 0, 0);
-    let converter_params = JSON.stringify({
+
+    const converter_params = JSON.stringify({
         'canvas_id': canvas.id,
         'svg_id': svg.id,
         'mode': mode,
         'clustering_mode': clustering_mode,
         'hierarchical': clustering_hierarchical,
-        'corner_threshold': deg2rad(globalcorner),
-        'length_threshold': globallength,
+        'corner_threshold': deg2rad(globalCorner),
+        'length_threshold': globalLength,
         'max_iterations': 10,
-        'splice_threshold': deg2rad(globalsplice),
-        'filter_speckle': globalfilterspeckle*globalfilterspeckle,
-        'color_precision': 8-globalcolorprecision,
-        'layer_difference': globallayerdifference,
-        'path_precision': globalpathprecision,
+        'splice_threshold': deg2rad(globalSplice),
+        'filter_speckle': globalFilterSpeckle * globalFilterSpeckle,
+        'color_precision': 8 - globalColorPrecision,
+        'layer_difference': globalLayerDifference,
+        'path_precision': globalPathPrecision,
     });
+
     if (runner) {
         runner.stop();
     }
-    runner = new ConverterRunner(converter_params);
-    progress.value = 0;
-    progressregion.style.display = 'block';
-    runner.run();
+
+    try {
+        runner = new ConverterRunner(converter_params);
+        progress.value = 0;
+        progressregion.style.display = 'block';
+        runner.run();
+    } catch (err) {
+        console.error('转换出错:', err);
+        showToast('转换失败，请检查参数或图片', '❌');
+    }
 }
 
 function deg2rad(deg) {
-    return deg/180*3.141592654;
+    return deg / 180 * Math.PI;
 }
 
+// 转换器执行器
 class ConverterRunner {
-    constructor (converter_params) {
+    constructor(converter_params) {
         this.converter =
-            clustering_mode == 'color' ?
-                ColorImageConverter.new_with_string(converter_params):
+            clustering_mode === 'color' ?
+                ColorImageConverter.new_with_string(converter_params) :
                 BinaryImageConverter.new_with_string(converter_params);
         this.converter.init();
         this.stopped = false;
-        if (clustering_mode == 'binary') {
-            svg.style.background = '#fff';
-            canvas.style.display = 'none';
+
+        if (clustering_mode === 'binary') {
+            svg.style.background = '#ffffff';
         } else {
             svg.style.background = '';
-            canvas.style.display = '';
         }
-        canvas.style.opacity = '';
+        applyViewMode(viewMode);
     }
 
-    run () {
-        const This = this;
-        setTimeout(function tick () {
-            if (!This.stopped) {
+    run() {
+        const self = this;
+        setTimeout(function tick() {
+            if (!self.stopped) {
                 let done = false;
                 const startTick = performance.now();
-                while (!(done = This.converter.tick()) &&
-                    performance.now() - startTick < 25) {
+                while (!(done = self.converter.tick()) && (performance.now() - startTick < 25)) {
                 }
-                progress.value = This.converter.progress();
-                if (progress.value >= 50) {
-                    canvas.style.display = 'none';
-                } else {
-                    canvas.style.opacity = (50 - progress.value) / 25;
-                }
-                if (progress.value >= progress.max) {
+                const p = self.converter.progress();
+                progress.value = p;
+
+                if (done || p >= 100) {
                     progressregion.style.display = 'none';
                     progress.value = 0;
-                }
-                if (!done) {
+                    applyViewMode(viewMode);
+                } else {
                     setTimeout(tick, 1);
                 }
             }
         }, 1);
     }
 
-    stop () {
+    stop() {
         this.stopped = true;
-        this.converter.free();
+        if (this.converter) {
+            this.converter.free();
+        }
     }
 }
+
+// 导出与下载 SVG
+document.getElementById('export').addEventListener('click', function (e) {
+    if (!svg.firstChild) {
+        showToast('暂无矢量化内容，请先加载图片', '⚠️');
+        e.preventDefault();
+        return;
+    }
+
+    const svgContent = `<?xml version="1.0" encoding="UTF-8"?>\n<!-- Generator: VTracer (Chinese Edition) -->\n` +
+        new XMLSerializer().serializeToString(svg);
+
+    const blob = new Blob([svgContent], { type: 'image/svg+xml;charset=utf-8' });
+    const url = window.URL.createObjectURL(blob);
+
+    this.href = url;
+    this.target = '_blank';
+    this.download = `vtracer-${Date.now()}.svg`;
+    showToast('SVG 文件已准备下载');
+});
+
+// 复制 SVG 源码到剪贴板
+document.getElementById('copySvgBtn').addEventListener('click', function () {
+    if (!svg.firstChild) {
+        showToast('暂无矢量化内容，请先加载图片', '⚠️');
+        return;
+    }
+
+    const svgContent = `<?xml version="1.0" encoding="UTF-8"?>\n<!-- Generator: VTracer (Chinese Edition) -->\n` +
+        new XMLSerializer().serializeToString(svg);
+
+    navigator.clipboard.writeText(svgContent)
+        .then(() => {
+            showToast('SVG 源码已复制到剪贴板！', '📋');
+        })
+        .catch(err => {
+            console.error(err);
+            showToast('复制失败，请手动导出', '❌');
+        });
+});
+
+// 初始化 UI
+updateUIFromState();

@@ -1,23 +1,43 @@
 const path = require('path');
+const HtmlWebpackPlugin = require('html-webpack-plugin');
+const CopyPlugin = require('copy-webpack-plugin');
 
 module.exports = {
   entry: "./bootstrap.js",
   output: {
     path: path.resolve(__dirname, "dist"),
-    filename: "bootstrap.js",
+    filename: "[name].[contenthash].js",
     clean: true,
   },
-  mode: "development",
-  // wasm-pack's `bundler` target emits ESM imports of the .wasm module; webpack
-  // 5 handles those natively once this experiment is on.
+  mode: process.env.NODE_ENV === 'production' ? 'production' : 'development',
   experiments: {
     asyncWebAssembly: true,
   },
+  plugins: [
+    new HtmlWebpackPlugin({
+      template: './index.html',
+      filename: 'index.html',
+      inject: 'body',
+    }),
+    new CopyPlugin({
+      patterns: [
+        {
+          from: path.resolve(__dirname, "../../docs/assets"),
+          to: "assets",
+          noErrorOnMissing: true,
+        },
+        {
+          from: path.resolve(__dirname, "_headers"),
+          to: "_headers",
+          toType: "file",
+          noErrorOnMissing: true,
+        },
+      ],
+    }),
+  ],
   devServer: {
-    //host: "0.0.0.0",
     port: 8080,
-    // dev-server 5 defaults its static root to ./public, which would leave
-    // index.html unserved. `assets` symlinks to ../../docs/assets for samples.
+    hot: true,
     static: { directory: __dirname },
-  }
+  },
 };
