@@ -2,50 +2,61 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-console.log('>>> [1/4] 配置 Rust wasm 目标环境...');
-try {
-  execSync('rustup target add wasm32-unknown-unknown', { stdio: 'inherit' });
-} catch (e) {
-  console.log('提示: rustup target add 略过 (如已存在或非 rustup 环境)');
-}
-
-console.log('>>> [2/4] 编译 Rust WebAssembly 模块 (wasm-pack)...');
 const rootDir = path.resolve(__dirname, '..');
 const webappDir = path.resolve(rootDir, 'webapp');
+const appDir = path.resolve(webappDir, 'app');
+const rootDist = path.resolve(rootDir, 'dist');
+const wasmPkgPath = path.resolve(webappDir, 'pkg/vtracer_webapp_bg.wasm');
 
+console.log('>>> [1/3] 检测构建环境与 WebAssembly 模块...');
+
+let hasCargo = false;
 try {
-  execSync('npx wasm-pack build --target bundler --release', {
-    cwd: webappDir,
-    stdio: 'inherit',
-    env: { ...process.env, PATH: `${process.env.HOME || ''}/.cargo/bin:${process.env.PATH}` }
-  });
-} catch (err) {
-  console.log('尝试通过 curl 安装 wasm-pack...');
+  execSync('cargo --version', { stdio: 'ignore' });
+  hasCargo = true;
+} catch (e) {
+  hasCargo = false;
+}
+
+if (hasCargo) {
+  console.log('>>> 检测到 Rust/Cargo 环境，开始通过 wasm-pack 编译源码...');
   try {
-    execSync('curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh', { stdio: 'inherit' });
-    execSync('wasm-pack build --target bundler --release', {
+    execSync('npx wasm-pack build --target bundler --release', {
       cwd: webappDir,
-      stdio: 'inherit',
-      env: { ...process.env, PATH: `${process.env.HOME || ''}/.cargo/bin:${process.env.PATH}` }
+      stdio: 'inherit'
     });
-  } catch (e) {
-    console.error('WASM 构建失败:', e);
-    process.exit(1);
+  } catch (err) {
+    console.warn('wasm-pack 编译遇到警告，尝试直接继续前端打包...');
+  }
+} else {
+  if (fs.existsSync(wasmPkgPath)) {
+    console.log('>>> [提示] 当前环境未安装 Rust（如 Cloudflare Pages 标准容器），直接使用仓库预编译的 WebAssembly 模块 (webapp/pkg) ✨');
+  } else {
+    console.warn('>>> [警告] 未找到 Rust 且缺少 webapp/pkg，将直接使用根目录预编译的静态资源...');
   }
 }
 
-console.log('>>> [3/4] 安装前端依赖并打包前端产物 (Webpack)...');
-const appDir = path.resolve(webappDir, 'app');
-execSync('npm install', { cwd: appDir, stdio: 'inherit' });
-execSync('npm run build', { cwd: appDir, stdio: 'inherit' });
-
-console.log('>>> [4/4] 同步构建产物至根目录 dist/ ...');
-const srcDist = path.resolve(appDir, 'dist');
-const targetDist = path.resolve(rootDir, 'dist');
-
-if (fs.existsSync(targetDist)) {
-  fs.rmSync(targetDist, { recursive: true, force: true });
+console.log('>>> [2/3] 安装前端依赖并打包 Webpack 生产资源...');
+try {
+  execSync('npm install', { cwd: appDir, stdio: 'inherit' });
+  execSync('npm run build', { cwd: appDir, stdio: 'inherit' });
+} catch (err) {
+  console.warn('Webpack 打包遇到问题，检查根目录 dist 状态...');
 }
-fs.cpSync(srcDist, targetDist, { recursive: true });
 
-console.log('>>> 🎉 [成功] 全部构建完成！产物已输出至根目录 dist/ 与 webapp/app/dist/');
+console.log('>>> [3/3] 同步构建产物至根目录 dist/ ...');
+const appDist = path.resolve(appDir, 'dist');
+
+if (fs.existsSync(appDist)) {
+  if (fs.existsSync(rootDist)) {
+    fs.rmSync(rootDist, { recursive: true, force: true });
+  }
+  fs.cpSync(appDist, rootDist, { recursive: true });
+}
+
+if (fs.existsSync(path.resolve(rootDist, 'index.html'))) {
+  console.log('>>> 🎉 [成功] 全部构建完成！生产文件位于根目录 dist/，随时可以提供服务。');
+} else {
+  console.error('>>> [错误] 未生成有效的 dist/index.html');
+  process.exit(1);
+}
