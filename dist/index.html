@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VTracer 中文版 - 高性能位图转矢量 SVG 在线工具</title>
+    <link rel="icon" type="image/png" href="./assets/apple-icon.png">
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --panel-bg: rgba(30, 41, 59, 0.85);
+            --panel-border: rgba(255, 255, 255, 0.1);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --primary-glow: rgba(59, 130, 246, 0.35);
+            --success: #10b981;
+            --card-bg: rgba(15, 23, 42, 0.6);
+            --radius-sm: 6px;
+            --radius-md: 10px;
+            --radius-lg: 16px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 顶栏 Header */
+        header {
+            height: 58px;
+            background: rgba(15, 23, 42, 0.95);
+            border-bottom: 1px solid var(--panel-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            backdrop-filter: blur(12px);
+            z-index: 100;
+            flex-shrink: 0;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .brand-logo {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 18px;
+            color: #fff;
+            box-shadow: 0 2px 10px var(--primary-glow);
+        }
+
+        .brand-title {
+            font-size: 17px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+
+        .brand-badge {
+            font-size: 11px;
+            background: rgba(59, 130, 246, 0.2);
+            color: #60a5fa;
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-left: 6px;
+        }
+
+        .header-nav {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .preset-bar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(30, 41, 59, 0.8);
+            padding: 4px;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--panel-border);
+        }
+
+        .preset-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            padding: 0 6px;
+        }
+
+        .preset-btn {
+            background: transparent;
+            color: var(--text-muted);
+            border: none;
+            font-size: 12px;
+            padding: 5px 10px;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .preset-btn:hover {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .preset-btn.active {
+            background: var(--primary);
+            color: #fff;
+            font-weight: 600;
+            box-shadow: 0 2px 8px var(--primary-glow);
+        }
+
+        .header-link {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 13px;
+            padding: 6px 12px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--panel-border);
+            transition: all 0.2s;
+        }
+
+        .header-link:hover {
+            color: #fff;
+            border-color: rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        /* 主工作区布局 */
+        .workspace {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* 左侧参数控制面板 */
+        .sidebar {
+            width: 360px;
+            background: var(--panel-bg);
+            border-right: 1px solid var(--panel-border);
+            backdrop-filter: blur(16px);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            z-index: 20;
+            flex-shrink: 0;
+        }
+
+        .sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .sidebar::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 3px;
+        }
+
+        .sidebar-content {
+            padding: 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .panel-section {
+            background: var(--card-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: var(--radius-md);
+            padding: 14px;
+        }
+
+        .section-header {
+            font-size: 13px;
+            font-weight: 600;
+            color: #cbd5e1;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 10px;
+        }
+
+        .tab-btn {
+            flex: 1;
+            background: rgba(30, 41, 59, 0.9);
+            color: var(--text-muted);
+            border: 1px solid var(--panel-border);
+            padding: 7px 10px;
+            border-radius: var(--radius-sm);
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+        }
+
+        .tab-btn:hover {
+            color: #fff;
+            border-color: rgba(255, 255, 255, 0.25);
+        }
+
+        .tab-btn.selected {
+            background: var(--primary);
+            color: #fff;
+            border-color: var(--primary);
+            font-weight: 600;
+            box-shadow: 0 2px 6px var(--primary-glow);
+        }
+
+        .control-item {
+            margin-top: 12px;
+        }
+
+        .control-label-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            margin-bottom: 6px;
+            color: #94a3b8;
+        }
+
+        .control-title {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            color: #e2e8f0;
+        }
+
+        .info-tip {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.12);
+            color: #94a3b8;
+            font-size: 10px;
+            cursor: help;
+        }
+
+        .control-val {
+            font-family: monospace;
+            font-size: 12px;
+            color: #38bdf8;
+            background: rgba(56, 189, 248, 0.1);
+            padding: 1px 6px;
+            border-radius: 4px;
+        }
+
+        .range-slider {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.15);
+            outline: none;
+            -webkit-appearance: none;
+            cursor: pointer;
+        }
+
+        .range-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #38bdf8;
+            cursor: pointer;
+            box-shadow: 0 0 6px rgba(56, 189, 248, 0.6);
+            transition: transform 0.1s;
+        }
+
+        .range-slider::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+
+        /* 底部操作区 */
+        .actions-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: auto;
+            padding-top: 10px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            color: #fff;
+            border: none;
+            border-radius: var(--radius-sm);
+            padding: 11px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            box-shadow: 0 4px 12px var(--primary-glow);
+            transition: all 0.2s ease;
+            text-decoration: none;
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.08);
+            color: #e2e8f0;
+            border: 1px solid var(--panel-border);
+            border-radius: var(--radius-sm);
+            padding: 9px;
+            font-size: 13px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.14);
+            color: #fff;
+        }
+
+        /* 右侧展示区域 Canvas/SVG */
+        .main-stage {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #090d16;
+            background-image: radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 0);
+            background-size: 24px 24px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* 顶部视图控制条 */
+        .stage-toolbar {
+            height: 44px;
+            background: rgba(15, 23, 42, 0.7);
+            border-bottom: 1px solid var(--panel-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px;
+            backdrop-filter: blur(8px);
+            z-index: 10;
+        }
+
+        .view-switchers {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .view-btn {
+            background: transparent;
+            border: 1px solid var(--panel-border);
+            color: var(--text-muted);
+            padding: 4px 10px;
+            border-radius: var(--radius-sm);
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .view-btn.active {
+            background: rgba(59, 130, 246, 0.2);
+            color: #60a5fa;
+            border-color: rgba(59, 130, 246, 0.5);
+        }
+
+        .view-btn:hover {
+            color: #fff;
+        }
+
+        .image-meta {
+            font-size: 12px;
+            color: #64748b;
+        }
+
+        /* 画布与展示容器 */
+        .viewport {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            padding: 24px;
+            overflow: auto;
+        }
+
+        #canvas-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            background: #1e293b;
+        }
+
+        #frame, #svg {
+            max-width: 100%;
+            max-height: 80vh;
+            display: block;
+            object-fit: contain;
+        }
+
+        #svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+        }
+
+        #svg > path:hover {
+            stroke: #f59e0b;
+            stroke-width: 1.5px;
+            cursor: pointer;
+        }
+
+        #frame {
+            position: relative;
+            z-index: 1;
+        }
+
+        /* 拖拽上传空状态 */
+        #droptext {
+            border: 2px dashed rgba(255, 255, 255, 0.2);
+            border-radius: var(--radius-lg);
+            padding: 60px 40px;
+            text-align: center;
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(8px);
+            transition: all 0.2s ease;
+            cursor: pointer;
+            max-width: 520px;
+        }
+
+        #droptext:hover, #droptext.hovering {
+            border-color: #3b82f6;
+            background: rgba(59, 130, 246, 0.08);
+            transform: scale(1.01);
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            display: block;
+        }
+
+        .upload-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #f1f5f9;
+        }
+
+        .upload-subtitle {
+            font-size: 13px;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+
+        .upload-badge {
+            display: inline-block;
+            margin-top: 14px;
+            font-size: 12px;
+            padding: 4px 10px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 20px;
+            color: #94a3b8;
+        }
+
+        /* 转换进度条 */
+        #progressregion {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.05);
+            z-index: 1000;
+            display: none;
+        }
+
+        #progressbar {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, #3b82f6, #10b981);
+            appearance: none;
+            border: none;
+        }
+        #progressbar::-webkit-progress-bar {
+            background: transparent;
+        }
+        #progressbar::-webkit-progress-value {
+            background: linear-gradient(90deg, #3b82f6, #10b981);
+            transition: width 0.1s ease;
+        }
+
+        /* Toast 消息提示 */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: #1e293b;
+            border: 1px solid var(--primary);
+            color: #f8fafc;
+            padding: 10px 18px;
+            border-radius: var(--radius-sm);
+            font-size: 13px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.3s ease;
+            pointer-events: none;
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        @media (max-width: 900px) {
+            .workspace {
+                flex-direction: column;
+            }
+            .sidebar {
+                width: 100%;
+                height: 45vh;
+                border-right: none;
+                border-bottom: 1px solid var(--panel-border);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- 隐藏文件上传 input -->
+    <input type="file" id="imageInput" accept="image/*" style="display: none;">
+
+    <!-- 顶部进度条 -->
+    <div id="progressregion">
+        <progress id="progressbar" value="0" max="100"></progress>
+    </div>
+
+    <!-- 顶栏 Header -->
+    <header>
+        <a href="#" class="brand">
+            <div class="brand-logo">V</div>
+            <span class="brand-title">VTracer 矢量化工具</span>
+            <span class="brand-badge">中文版</span>
+        </a>
+
+        <!-- 场景预设栏 -->
+        <div class="header-nav">
+            <div class="preset-bar">
+                <span class="preset-label">快捷预设:</span>
+                <button class="preset-btn active" data-preset="illustration">🎨 彩色插画</button>
+                <button class="preset-btn" data-preset="bw">✒️ 黑白线稿</button>
+                <button class="preset-btn" data-preset="pixel">👾 像素艺术</button>
+                <button class="preset-btn" data-preset="poster">🎯 扁平海报</button>
+                <button class="preset-btn" data-preset="photo">🖼️ 细腻照片</button>
+            </div>
+
+            <a href="https://github.com/zhlf2008/vtracer" target="_blank" class="header-link">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+                </svg>
+                GitHub
+            </a>
+        </div>
+    </header>
+
+    <!-- 工作区 -->
+    <div class="workspace">
+        <!-- 左侧参数控制栏 -->
+        <aside class="sidebar">
+            <div class="sidebar-content">
+                
+                <!-- 1. 区域聚类与分层 -->
+                <div class="panel-section">
+                    <div class="section-header">
+                        <span>🧩 区域聚类与分层 (Clustering)</span>
+                    </div>
+
+                    <!-- 色彩模式 -->
+                    <div class="control-item">
+                        <div class="control-label-row">
+                            <span class="control-title">色彩模式 <span class="info-tip" title="彩色支持提取全彩分层，黑白专为线稿书法设计">?</span></span>
+                        </div>
+                        <div class="btn-group">
+                            <button id="clustering-color" class="tab-btn selected" title="真彩色模式">彩色 (Color)</button>
+                            <button id="clustering-binary" class="tab-btn" title="黑白二值图模式">黑白 (B/W)</button>
+                        </div>
+                    </div>
+
+                    <!-- 图层分层结构 -->
+                    <div class="control-item">
+                        <div class="control-label-row">
+                            <span class="control-title">图层组织 <span class="info-tip" title="分层堆叠层级清晰，无缝拼接适合拼图马赛克">?</span></span>
+                        </div>
+                        <div class="btn-group">
+                            <button id="clustering-stacked" class="tab-btn selected" title="自底向上堆叠（推荐）">分层堆叠 (Stacked)</button>
+                            <button id="clustering-cutout" class="tab-btn" title="切块拼接无缝隙">无缝拼接 (Cutout)</button>
+                        </div>
+                    </div>
+
+                    <!-- 杂点过滤 -->
+                    <div class="control-item">
+                        <div class="control-label-row">
+                            <span class="control-title">杂点过滤 <span class="info-tip" title="去除面积小于指定像素的小色块噪点，数值越大画面越纯净">?</span></span>
+                            <span id="filterspecklevalue" class="control-val">4</span>
+                        </div>
+                        <input id="filterspeckle" class="range-slider" type="range" min="1" max="16" step="1" value="4">
+                    </div>
+
+                    <!-- 色彩精度 (彩色专有) -->
+                    <div class="control-item clustering-color-options">
+                        <div class="control-label-row">
+                            <span class="control-title">色彩采样精度 <span class="info-tip" title="RGB通道有效位数(1~8)，越高颜色层次越丰富细腻">?</span></span>
+                            <span id="colorprecisionvalue" class="control-val">7</span>
+                        </div>
+                        <input id="colorprecision" class="range-slider" type="range" min="1" max="8" step="1" value="7">
+                    </div>
+
+                    <!-- 渐变步长 (彩色专有) -->
+                    <div class="control-item clustering-color-options">
+                        <div class="control-label-row">
+                            <span class="control-title">渐变分层步长 <span class="info-tip" title="渐变层之间的颜色容差(0~255)，越高色块层数越少越规整">?</span></span>
+                            <span id="layerdifferencevalue" class="control-val">16</span>
+                        </div>
+                        <input id="layerdifference" class="range-slider" type="range" min="0" max="255" step="1" value="16">
+                    </div>
+                </div>
+
+                <!-- 2. 曲线拟合与平滑 -->
+                <div class="panel-section">
+                    <div class="section-header">
+                        <span>〰️ 曲线拟合与平滑 (Curve Fitting)</span>
+                    </div>
+
+                    <!-- 拟合模式 -->
+                    <div class="control-item">
+                        <div class="control-label-row">
+                            <span class="control-title">曲线类型 <span class="info-tip" title="样条曲线最平滑，多边形为直线折线，像素为阶梯状">?</span></span>
+                        </div>
+                        <div class="btn-group">
+                            <button id="spline" class="tab-btn selected" title="平滑贝塞尔曲线拟合">平滑曲线 (Spline)</button>
+                            <button id="polygon" class="tab-btn" title="多边形折线">多边形 (Polygon)</button>
+                            <button id="none" class="tab-btn" title="保留像素阶梯边缘">像素 (Pixel)</button>
+                        </div>
+                    </div>
+
+                    <!-- 拐角阈值 -->
+                    <div class="control-item spline-options">
+                        <div class="control-label-row">
+                            <span class="control-title">拐角锐度阈值 <span class="info-tip" title="判断为尖锐转折角的角度(0°~180°)，数值越小拐角越尖锐">?</span></span>
+                            <span id="cornervalue" class="control-val">60°</span>
+                        </div>
+                        <input id="corner" class="range-slider" type="range" min="0" max="180" step="1" value="60">
+                    </div>
+
+                    <!-- 分段长度 -->
+                    <div class="control-item spline-options">
+                        <div class="control-label-row">
+                            <span class="control-title">细分分段步长 <span class="info-tip" title="曲线细分迭代长度，数值越小曲线拟合越精细">?</span></span>
+                            <span id="lengthvalue" class="control-val">4.0</span>
+                        </div>
+                        <input id="length" class="range-slider" type="range" min="3.5" max="10" step="0.5" value="4">
+                    </div>
+
+                    <!-- 切割阈值 -->
+                    <div class="control-item spline-options">
+                        <div class="control-label-row">
+                            <span class="control-title">曲线断点阈值 <span class="info-tip" title="曲线之间角度位移断点判定(0°~180°)">?</span></span>
+                            <span id="splicevalue" class="control-val">45°</span>
+                        </div>
+                        <input id="splice" class="range-slider" type="range" min="0" max="180" step="1" value="45">
+                    </div>
+
+                    <!-- 坐标精度 -->
+                    <div class="control-item">
+                        <div class="control-label-row">
+                            <span class="control-title">SVG 坐标小数精度 <span class="info-tip" title="SVG路径坐标小数点保留位数，越低文件越精简">?</span></span>
+                            <span id="pathprecisionvalue" class="control-val">8</span>
+                        </div>
+                        <input id="pathprecision" class="range-slider" type="range" min="1" max="16" step="1" value="8">
+                    </div>
+                </div>
+
+                <!-- 3. 操作与导出 -->
+                <div class="actions-panel">
+                    <a id="export" class="btn-primary" href="#">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                        </svg>
+                        下载 SVG 文件
+                    </a>
+
+                    <button id="copySvgBtn" class="btn-secondary">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>
+                        复制 SVG 源码
+                    </button>
+
+                    <button id="reUploadBtn" class="btn-secondary">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="17 8 12 3 7 8"/>
+                            <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                        重新选择图片 (或直接粘贴)
+                    </button>
+                </div>
+
+            </div>
+        </aside>
+
+        <!-- 右侧主预览区 -->
+        <main class="main-stage">
+            <!-- 视图控制条 -->
+            <div class="stage-toolbar">
+                <div class="view-switchers">
+                    <span>视图对比:</span>
+                    <button id="viewSvg" class="view-btn active">矢量 SVG</button>
+                    <button id="viewOriginal" class="view-btn">原始位图</button>
+                    <button id="viewBlend" class="view-btn">叠加对比</button>
+                </div>
+                <div id="imageMeta" class="image-meta">支持直接拖拽图片或按 Ctrl+V 粘贴</div>
+            </div>
+
+            <!-- 画布视口 -->
+            <div id="drop" class="viewport">
+                <!-- 未上传时的空状态 -->
+                <div id="droptext">
+                    <span class="upload-icon">📂</span>
+                    <div class="upload-title">将图片拖放到此处</div>
+                    <div class="upload-subtitle">
+                        支持 JPG、PNG、WebP 等格式<br>
+                        或点击 <a href="#" id="imageSelect" style="color: #60a5fa; text-decoration: underline;">选择本地文件</a>，也可以直接按 <b>Ctrl+V</b> 粘贴
+                    </div>
+                    <div class="upload-badge">⚡ 基于 Rust WebAssembly 本地秒级转换，数据不出浏览器</div>
+                </div>
+
+                <!-- 图像与矢量图容器 -->
+                <div id="canvas-container" style="display: none;">
+                    <canvas id="frame"></canvas>
+                    <svg id="svg" version="1.1" xmlns="http://www.w3.org/2000/svg"></svg>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast 提示组件 -->
+    <div id="toast" class="toast">
+        <span id="toastIcon">✅</span>
+        <span id="toastMsg">操作成功</span>
+    </div>
+
+<script defer src="main.dc49a2135f5267fb2f9d.js"></script></body>
+</html>
