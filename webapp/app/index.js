@@ -11,10 +11,9 @@ const canvasContainer = document.getElementById('canvas-container');
 const droptext = document.getElementById('droptext');
 const toastEl = document.getElementById('toast');
 const toastMsg = document.getElementById('toastMsg');
-const toastIcon = document.getElementById('toastIcon');
 const imageMeta = document.getElementById('imageMeta');
 
-// 当前状态参数
+// 状态参数
 let mode = 'spline'; // 'spline' | 'polygon' | 'none'
 let clustering_mode = 'color'; // 'color' | 'binary'
 let clustering_hierarchical = 'stacked'; // 'stacked' | 'cutout'
@@ -29,17 +28,16 @@ let globalColorPrecision = 7;
 let globalLayerDifference = 16;
 let globalPathPrecision = 8;
 
-// Toast 提示函数
-function showToast(message, icon = '✅') {
+// Toast 提示
+function showToast(message) {
     toastMsg.textContent = message;
-    toastIcon.textContent = icon;
     toastEl.classList.add('show');
     setTimeout(() => {
         toastEl.classList.remove('show');
-    }, 2400);
+    }, 2000);
 }
 
-// 预设配置表
+// 预设配置
 const presets = {
     illustration: {
         name: '彩色插画',
@@ -108,7 +106,6 @@ const presets = {
     }
 };
 
-// 应用预设
 function applyPreset(presetKey) {
     const config = presets[presetKey];
     if (!config) return;
@@ -126,25 +123,24 @@ function applyPreset(presetKey) {
 
     updateUIFromState();
     restart();
-    showToast(`已切换至「${config.name}」预设`);
+    showToast(`预设已切换: ${config.name}`);
 }
 
-// 同步 UI 控件与当前变量
 function updateUIFromState() {
     // 聚类模式
-    document.getElementById('clustering-color').classList.toggle('selected', clustering_mode === 'color');
-    document.getElementById('clustering-binary').classList.toggle('selected', clustering_mode === 'binary');
+    document.getElementById('clustering-color').classList.toggle('active', clustering_mode === 'color');
+    document.getElementById('clustering-binary').classList.toggle('active', clustering_mode === 'binary');
 
     // 图层模式
-    document.getElementById('clustering-stacked').classList.toggle('selected', clustering_hierarchical === 'stacked');
-    document.getElementById('clustering-cutout').classList.toggle('selected', clustering_hierarchical === 'cutout');
+    document.getElementById('clustering-stacked').classList.toggle('active', clustering_hierarchical === 'stacked');
+    document.getElementById('clustering-cutout').classList.toggle('active', clustering_hierarchical === 'cutout');
 
     // 曲线模式
-    document.getElementById('spline').classList.toggle('selected', mode === 'spline');
-    document.getElementById('polygon').classList.toggle('selected', mode === 'polygon');
-    document.getElementById('none').classList.toggle('selected', mode === 'none');
+    document.getElementById('spline').classList.toggle('active', mode === 'spline');
+    document.getElementById('polygon').classList.toggle('active', mode === 'polygon');
+    document.getElementById('none').classList.toggle('active', mode === 'none');
 
-    // 控制显示/隐藏
+    // 选项可见性
     Array.from(document.getElementsByClassName('clustering-color-options')).forEach(el => {
         el.style.display = clustering_mode === 'color' ? '' : 'none';
     });
@@ -152,7 +148,7 @@ function updateUIFromState() {
         el.style.display = mode === 'spline' ? '' : 'none';
     });
 
-    // 滑块及显示值
+    // 数值与滑块
     document.getElementById('filterspeckle').value = globalFilterSpeckle;
     document.getElementById('filterspecklevalue').textContent = globalFilterSpeckle;
 
@@ -175,7 +171,7 @@ function updateUIFromState() {
     document.getElementById('pathprecisionvalue').textContent = globalPathPrecision;
 }
 
-// 绑定预设按钮
+// 预设绑定
 document.querySelectorAll('.preset-btn').forEach(btn => {
     btn.addEventListener('click', function () {
         document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
@@ -184,7 +180,7 @@ document.querySelectorAll('.preset-btn').forEach(btn => {
     });
 });
 
-// 绑定聚类按钮
+// 分段选择器绑定
 document.getElementById('clustering-color').addEventListener('click', () => {
     clustering_mode = 'color';
     updateUIFromState();
@@ -209,7 +205,6 @@ document.getElementById('clustering-cutout').addEventListener('click', () => {
     restart();
 });
 
-// 绑定曲线模式按钮
 document.getElementById('spline').addEventListener('click', () => {
     mode = 'spline';
     updateUIFromState();
@@ -228,7 +223,7 @@ document.getElementById('none').addEventListener('click', () => {
     restart();
 });
 
-// 绑定滑块实时显示与改变触发
+// 滑块绑定
 function bindSlider(id, valId, suffix = '', isFloat = false, onChangeCallback) {
     const slider = document.getElementById(id);
     const valDisplay = document.getElementById(valId);
@@ -252,7 +247,7 @@ bindSlider('length', 'lengthvalue', '', true, v => globalLength = v);
 bindSlider('splice', 'splicevalue', '°', false, v => globalSplice = v);
 bindSlider('pathprecision', 'pathprecisionvalue', '', false, v => globalPathPrecision = v);
 
-// 视图模式切换
+// 视图切换
 function applyViewMode(newMode) {
     viewMode = newMode;
     document.getElementById('viewSvg').classList.toggle('active', viewMode === 'svg');
@@ -279,7 +274,7 @@ document.getElementById('viewSvg').addEventListener('click', () => applyViewMode
 document.getElementById('viewOriginal').addEventListener('click', () => applyViewMode('original'));
 document.getElementById('viewBlend').addEventListener('click', () => applyViewMode('blend'));
 
-// 上传与拖拽
+// 上传交互
 const imageInput = document.getElementById('imageInput');
 const imageSelect = document.getElementById('imageSelect');
 const reUploadBtn = document.getElementById('reUploadBtn');
@@ -300,7 +295,7 @@ imageInput.addEventListener('change', function () {
     }
 });
 
-// 剪贴板粘贴 (Ctrl+V)
+// 粘贴
 document.addEventListener('paste', function (e) {
     if (e.clipboardData && e.clipboardData.items) {
         const items = e.clipboardData.items;
@@ -308,7 +303,7 @@ document.addEventListener('paste', function (e) {
             if (items[i].type.indexOf('image') !== -1) {
                 const blob = items[i].getAsFile();
                 loadImage(blob);
-                showToast('已读取剪贴板图片', '📋');
+                showToast('已从剪贴板载入图片');
                 e.preventDefault();
                 return;
             }
@@ -316,7 +311,7 @@ document.addEventListener('paste', function (e) {
     }
 });
 
-// 拖拽处理
+// 拖拽
 drop.addEventListener('dragenter', (e) => {
     e.preventDefault();
     droptext.classList.add('hovering');
@@ -361,20 +356,19 @@ function loadImage(source) {
         canvasContainer.style.display = 'flex';
 
         if (imageMeta) {
-            imageMeta.textContent = `分辨率: ${width} × ${height} px | 格式: SVG`;
+            imageMeta.textContent = `${width} × ${height} px · 矢量渲染中...`;
         }
 
         restart();
     };
 }
 
-// 重新启动转换管线
+// 执行矢量化转换
 function restart() {
     if (!img.src || !img.naturalWidth) {
         return;
     }
 
-    // 清理旧 SVG
     while (svg.firstChild) {
         svg.removeChild(svg.firstChild);
     }
@@ -408,8 +402,8 @@ function restart() {
         progressregion.style.display = 'block';
         runner.run();
     } catch (err) {
-        console.error('转换出错:', err);
-        showToast('转换失败，请检查参数或图片', '❌');
+        console.error('转换失败:', err);
+        showToast('转换失败，请检查参数');
     }
 }
 
@@ -417,7 +411,6 @@ function deg2rad(deg) {
     return deg / 180 * Math.PI;
 }
 
-// 转换器执行器
 class ConverterRunner {
     constructor(converter_params) {
         this.converter =
@@ -450,6 +443,10 @@ class ConverterRunner {
                     progressregion.style.display = 'none';
                     progress.value = 0;
                     applyViewMode(viewMode);
+                    if (imageMeta && img.naturalWidth) {
+                        const pathCount = svg.querySelectorAll('path').length;
+                        imageMeta.textContent = `${img.naturalWidth} × ${img.naturalHeight} px · ${pathCount} 条矢量路径`;
+                    }
                 } else {
                     setTimeout(tick, 1);
                 }
@@ -468,12 +465,12 @@ class ConverterRunner {
 // 导出与下载 SVG
 document.getElementById('export').addEventListener('click', function (e) {
     if (!svg.firstChild) {
-        showToast('暂无矢量化内容，请先加载图片', '⚠️');
+        showToast('请先加载图片');
         e.preventDefault();
         return;
     }
 
-    const svgContent = `<?xml version="1.0" encoding="UTF-8"?>\n<!-- Generator: VTracer (Chinese Edition) -->\n` +
+    const svgContent = `<?xml version="1.0" encoding="UTF-8"?>\n<!-- Generator: VTracer Studio -->\n` +
         new XMLSerializer().serializeToString(svg);
 
     const blob = new Blob([svgContent], { type: 'image/svg+xml;charset=utf-8' });
@@ -481,29 +478,37 @@ document.getElementById('export').addEventListener('click', function (e) {
 
     this.href = url;
     this.target = '_blank';
-    this.download = `vtracer-${Date.now()}.svg`;
-    showToast('SVG 文件已准备下载');
+    this.download = `vector-${Date.now()}.svg`;
+    showToast('SVG 已开始下载');
 });
 
-// 复制 SVG 源码到剪贴板
+// 复制 SVG 源码
 document.getElementById('copySvgBtn').addEventListener('click', function () {
     if (!svg.firstChild) {
-        showToast('暂无矢量化内容，请先加载图片', '⚠️');
+        showToast('请先加载图片');
         return;
     }
 
-    const svgContent = `<?xml version="1.0" encoding="UTF-8"?>\n<!-- Generator: VTracer (Chinese Edition) -->\n` +
+    const svgContent = `<?xml version="1.0" encoding="UTF-8"?>\n<!-- Generator: VTracer Studio -->\n` +
         new XMLSerializer().serializeToString(svg);
 
     navigator.clipboard.writeText(svgContent)
         .then(() => {
-            showToast('SVG 源码已复制到剪贴板！', '📋');
+            showToast('SVG 代码已复制到剪贴板');
         })
         .catch(err => {
             console.error(err);
-            showToast('复制失败，请手动导出', '❌');
+            showToast('复制失败');
         });
 });
 
-// 初始化 UI
+// 快捷键支持 (Ctrl+S / Cmd+S 快速下载)
+document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        document.getElementById('export').click();
+    }
+});
+
+// 初始化
 updateUIFromState();
